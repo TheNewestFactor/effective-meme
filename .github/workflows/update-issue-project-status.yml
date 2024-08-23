@@ -21,9 +21,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PROJECT_ID="8"
+          PROJECT_ID="4905915"
 
           echo "Fetching project details for project $PROJECT_ID..."
-          PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on ProjectNext { id title fields(first: 20) { nodes { id name settings } } } } }"}')
+          PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on Project { id name body } } }"}')
           PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
           echo "Project Response: $PROJECT_RESPONSE"
