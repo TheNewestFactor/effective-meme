@@ -37,12 +37,28 @@ jobs:
             echo "column=Backlog" >> $GITHUB_ENV
           fi
 
+      - name: Get issue or PR number
+        id: get-issue-pr-number
+        run: |
+          if [[ "${{ github.event.pull_request }}" ]]; then
+            echo "issue_or_pr=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          else
+            echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
+          fi
+
+      - name: Get project column ID
+        id: get-column-id
+        run: |
+          PROJECT_ID=$(gh repo view ${{ github.repository }} --json projects --jq '.projects[0].id')
+          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${{ env.column }}\") | .id")
+          echo "column_id=$COLUMN_ID" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Update project column
         run: |
-          ISSUE_OR_PR=${{ github.event.issue.number || github.event.pull_request.number }}
-          gh repo view ${{ github.repository }} --json projects --jq '.projects[0].id' | xargs -I {} gh api -X POST /projects/{}/columns --field name="${{ env.column }}"
-          gh api -X PATCH /repos/${{ github.repository }}/issues/${{ ISSUE_OR_PR }}/projects \
-            -f project_column_id="${{ column_id }}"
+          gh api -X PATCH /repos/${{ github.repository }}/issues/${{ env.issue_or_pr }}/projects \
+            -f project_column_id="${{ env.column_id }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
