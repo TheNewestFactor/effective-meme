@@ -43,7 +43,7 @@ jobs:
           COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
 
           echo "Fetching available columns from: $COLUMNS_URL"
-          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '.[] | .name')
+          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '. | .[] | .name')
 
           echo "Available columns:"
           echo "$AVAILABLE_COLUMNS"
