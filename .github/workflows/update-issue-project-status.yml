@@ -16,8 +16,8 @@ jobs:
       - name: Set up GitHub CLI
         run: |
           sudo apt-get update
-          sudo apt-get install gh
-          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          sudo apt-get install -y gh
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
       - name: Determine project column based on label
         id: determine-column
@@ -57,11 +57,8 @@ jobs:
       - name: Update project column
         run: |
           ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          gh api -X POST /projects/${{ env.project_id }}/columns/${{ env.column_id }}/cards --input - <<EOF
-{
-  "content_id": $ISSUE_OR_PR_NUMBER,
-  "content_type": "Issue"
-}
-EOF
+          gh api -X POST /projects/${{ env.project_id }}/columns/${{ env.column_id }}/cards \
+            -f content_id=$ISSUE_OR_PR_NUMBER \
+            -f content_type=Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
