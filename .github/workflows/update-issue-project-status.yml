@@ -5,7 +5,7 @@
 # file with configuration.  For more information, see:
 # https://github.com/actions/labeler
 
-name: Update Issue Project Status and Debug
+name: Update Issue Project Status and Add to Project
 
 on:
   issues:
@@ -19,39 +19,30 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v3
 
-      - name: Debug Project and Columns
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add to Project
+        uses: actions/add-to-project@main
+        id: addItem
+        with:
+          project-url: https://github.com/orgs/TheNewestFactor/projects/8
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          labeled: bug, feature-request, other  # Add any other labels as required
+          label-operator: OR
+
+      - name: Determine Project Status
+        id: determine-status
         run: |
           LABEL=${{ github.event.label.name }}
-          ISSUE_NUMBER=${{ github.event.issue.number }}
-          REPO=${{ github.repository }}
-
-          echo "Fetching issue details..."
-          ISSUE_DETAILS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER)
-          echo "Issue Details: $ISSUE_DETAILS"
-
-          PROJECT_ID=4905915
-          COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
-
-          echo "Fetching available columns from: $COLUMNS_URL"
-          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
-          echo "Available columns response: $AVAILABLE_COLUMNS"
-
           if [ "$LABEL" = "bug" ]; then
-            STATUS="Security"
+            echo "status=Security" >> $GITHUB_ENV
           elif [ "$LABEL" = "feature-request" ]; then
-            STATUS="Enhancement"
+            echo "status=Enhancement" >> $GITHUB_ENV
           else
-            STATUS="Backlog"
-          fi
+            echo "status=Backlog" >> $GITHUB_ENV
 
-          COLUMN_ID=$(echo "$AVAILABLE_COLUMNS" | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
-
-          if [ -z "$COLUMN_ID" ]; then
-            echo "Column $STATUS not found in the project."
-            exit 1
-          fi
-
-          ISSUE_URL=$(echo "$ISSUE_DETAILS" | jq -r '.html_url')
-          curl -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards -d "{\"content_url\":\"$ISSUE_URL\"}"
+      - name: Update Project Item Status
+        uses: kalgurn/update-project-item-status@main
+        with:
+          project-url: https://github.com/orgs/TheNewestFactor/projects/8
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          item-id: ${{ steps.addItem.outputs.itemId }}
+          status: ${{ env.status }}
