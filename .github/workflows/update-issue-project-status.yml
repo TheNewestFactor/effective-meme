@@ -17,63 +17,48 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install jq
 
-      - name: Get Projects
+      - name: Get Project Details
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          ORG="TheNewestFactor"
+          PROJECT_ID=8
           REPO=${{ github.repository }}
           ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
           ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
 
-          echo "Fetching projects for repository..."
-          RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/projects)
-          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          PROJECTS=$(echo "$RESPONSE" | head -n-1)
-          echo "HTTP Status: $HTTP_STATUS"
-          echo "Projects: $PROJECTS"
+          echo "Fetching columns for project $PROJECT_ID..."
+          COLUMNS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/orgs/$ORG/projects/$PROJECT_ID/columns)
+          COLUMNS_HTTP_STATUS=$(echo "$COLUMNS_RESPONSE" | tail -n1)
+          COLUMNS=$(echo "$COLUMNS_RESPONSE" | head -n-1)
+          echo "Columns HTTP Status: $COLUMNS_HTTP_STATUS"
+          echo "Columns: $COLUMNS"
 
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "Failed to fetch projects. Please check the token permissions and API endpoint."
+          if [ "$COLUMNS_HTTP_STATUS" -ne 200 ]; then
+            echo "Failed to fetch columns for project $PROJECT_ID. Please check the token permissions and API endpoint."
             exit 1
           fi
 
-          echo "$PROJECTS" | jq -c '.[]' | while read project; do
-            PROJECT_ID=$(echo "$project" | jq -r '.id')
-            PROJECT_NAME=$(echo "$project" | jq -r '.name')
+          echo "$COLUMNS" | jq -c '.[]' | while read column; do
+            COLUMN_ID=$(echo "$column" | jq -r '.id')
+            COLUMN_NAME=$(echo "$column" | jq -r '.name')
 
-            echo "Fetching columns for project $PROJECT_NAME..."
-            COLUMNS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns)
-            COLUMNS_HTTP_STATUS=$(echo "$COLUMNS_RESPONSE" | tail -n1)
-            COLUMNS=$(echo "$COLUMNS_RESPONSE" | head -n-1)
-            echo "Columns HTTP Status: $COLUMNS_HTTP_STATUS"
-            echo "Columns: $COLUMNS"
+            echo "Checking cards in column $COLUMN_NAME..."
+            CARDS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards)
+            CARDS_HTTP_STATUS=$(echo "$CARDS_RESPONSE" | tail -n1)
+            CARDS=$(echo "$CARDS_RESPONSE" | head -n-1)
+            echo "Cards HTTP Status: $CARDS_HTTP_STATUS"
+            echo "Cards: $CARDS"
 
-            if [ "$COLUMNS_HTTP_STATUS" -ne 200 ]; then
-              echo "Failed to fetch columns for project $PROJECT_NAME. Please check the token permissions and API endpoint."
+            if [ "$CARDS_HTTP_STATUS" -ne 200 ]; then
+              echo "Failed to fetch cards for column $COLUMN_NAME. Please check the token permissions and API endpoint."
               continue
             fi
 
-            echo "$COLUMNS" | jq -c '.[]' | while read column; do
-              COLUMN_ID=$(echo "$column" | jq -r '.id')
-              COLUMN_NAME=$(echo "$column" | jq -r '.name')
+            CARD_URL=$(echo "$CARDS" | jq -r --arg ISSUE_URL "https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER" '.[] | select(.content_url == $ISSUE_URL) | .content_url')
 
-              echo "Checking cards in column $COLUMN_NAME..."
-              CARDS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards)
-              CARDS_HTTP_STATUS=$(echo "$CARDS_RESPONSE" | tail -n1)
-              CARDS=$(echo "$CARDS_RESPONSE" | head -n-1)
-              echo "Cards HTTP Status: $CARDS_HTTP_STATUS"
-              echo "Cards: $CARDS"
-
-              if [ "$CARDS_HTTP_STATUS" -ne 200 ]; then
-                echo "Failed to fetch cards for column $COLUMN_NAME. Please check the token permissions and API endpoint."
-                continue
-              fi
-
-              CARD_URL=$(echo "$CARDS" | jq -r --arg ISSUE_URL "https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER" '.[] | select(.content_url == $ISSUE_URL) | .content_url')
-
-              if [ -n "$CARD_URL" ]; then
-                echo "Issue/PR found in project $PROJECT_NAME (ID: $PROJECT_ID), column $COLUMN_NAME"
-                exit 0
-              fi
-            done
+            if [ -n "$CARD_URL" ]; then
+              echo "Issue/PR found in project column $COLUMN_NAME"
+              exit 0
+            fi
           done
