@@ -36,28 +36,58 @@ jobs:
         run: |
           if [[ "${{ github.event.pull_request }}" ]]; then
             echo "issue_or_pr=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "is_pr=true" >> $GITHUB_ENV
           else
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
+            echo "is_pr=false" >> $GITHUB_ENV
           fi
 
       - name: Debug project information
         id: debug-project
         run: |
-          PROJECT_ID=4905915  # Replace with your project ID
-          echo "Fetching project details for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID} || exit 1
-          echo "Fetching columns for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID}/columns || exit 1
+          GRAPHQL_QUERY=$(cat <<EOF
+          {
+            node(id: "UHJvamVjdDo0OTA1OTE1") {
+              ... on ProjectV2 {
+                id
+                title
+                columns(first: 10) {
+                  nodes {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          )
+          echo "Fetching project details for project ID 4905915"
+          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get project column ID
         id: get-project-column-id
         run: |
-          PROJECT_ID=4905915  # Replace with your project ID
           COLUMN_NAME="${{ env.column }}"
-          echo "Fetching columns for project ID $PROJECT_ID"
-          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
+          echo "Fetching column ID for column name $COLUMN_NAME"
+          GRAPHQL_QUERY=$(cat <<EOF
+          {
+            node(id: "UHJvamVjdDo0OTA1OTE1") {
+              ... on ProjectV2 {
+                columns(first: 10) {
+                  nodes {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          )
+          COLUMN_ID=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql | jq -r --arg COLUMN_NAME "$COLUMN_NAME" '.data.node.columns.nodes[] | select(.name == $COLUMN_NAME) | .id')
           if [ -z "$COLUMN_ID" ]; then
             echo "No column found for name $COLUMN_NAME."
             exit 1
@@ -68,11 +98,26 @@ jobs:
 
       - name: Move issue or PR to project column
         run: |
-          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
+          PROJECT_ID="4905915"  # Provided project ID
           COLUMN_ID=${{ env.column_id }}
+          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
+          IS_PR=${{ env.is_pr }}
+          CONTENT_TYPE="Issue"
+          if [ "$IS_PR" = "true" ]; then
+            CONTENT_TYPE="PullRequest"
+          fi
+
+          GRAPHQL_MUTATION=$(cat <<EOF
+          mutation {
+            addProjectV2ItemById(input: {projectId: "$PROJECT_ID", contentId: "$ISSUE_OR_PR_NUMBER", contentType: $CONTENT_TYPE}) {
+              item {
+                id
+              }
+            }
+          }
+          EOF
+          )
           echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to column ID $COLUMN_ID"
-          gh api -X POST /projects/columns/${COLUMN_ID}/cards \
-            -f content_id=${ISSUE_OR_PR_NUMBER} \
-            -f content_type=Issue
+          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_MUTATION\"}" https://api.github.com/graphql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
