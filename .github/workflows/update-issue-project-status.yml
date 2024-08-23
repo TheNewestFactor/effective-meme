@@ -47,11 +47,20 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
-      - name: Get project column ID
-        id: get-column-id
+      - name: Fetch project columns
+        id: fetch-columns
         run: |
-          PROJECT_ID=$(gh repo view ${{ github.repository }} --json projects --jq '.projects[0].id')
+          REPO=${{ github.repository }}
+          PROJECT_ID=$(gh api -X GET /repos/${REPO}/projects --jq '.[] | select(.name == "Project Name") | .id')
+          if [ -z "$PROJECT_ID" ]; then
+            echo "No project found or project ID could not be retrieved."
+            exit 1
+          fi
           COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${{ env.column }}\") | .id")
+          if [ -z "$COLUMN_ID" ]; then
+            echo "No column found or column ID could not be retrieved."
+            exit 1
+          fi
           echo "column_id=$COLUMN_ID" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
