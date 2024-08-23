@@ -1,4 +1,4 @@
-name: Fetch Project Status
+name: Fetch Associated Project
 
 on:
   issues:
@@ -7,7 +7,7 @@ on:
     types: [labeled]
 
 jobs:
-  fetch-project-status:
+  fetch-associated-project:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,13 +17,27 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install jq
 
-      - name: Fetch Project Status
+      - name: Fetch Associated Project
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PROJECT_ID="8"
+          REPO=${{ github.repository }}
+          ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
+          ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
 
-          echo "Fetching project details for project $PROJECT_ID..."
-          PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on Project { id name body } } }"}')
-          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
+          echo "Fetching issue or pull request details..."
+          ISSUE_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER)
+          echo "Issue Response: $ISSUE_RESPONSE"
+
+          PROJECT_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.projects_url')
+          if [ "$PROJECT_URL" == "null" ]; then
+            echo "No project associated with this issue or pull request."
+            exit 0
+          fi
+
+          echo "Fetching project details..."
+          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" "$PROJECT_URL")
           echo "Project Response: $PROJECT_RESPONSE"
+
+          PROJECT_NAME=$(echo "$PROJECT_RESPONSE" | jq -r '.[0].name')
+          echo "Project Name: $PROJECT_NAME"
