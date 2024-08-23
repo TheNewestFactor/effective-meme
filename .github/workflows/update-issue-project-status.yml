@@ -40,7 +40,7 @@ jobs:
           echo "Project ID: $PROJECT_ID"
 
           ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
-          COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
+          COLUMNS_URL=https://api.github.com/orgs/TheNewestFactor/projects/$PROJECT_ID/columns
 
           echo "Fetching available columns from: $COLUMNS_URL"
           AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
