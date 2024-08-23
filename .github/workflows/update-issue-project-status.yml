@@ -29,7 +29,14 @@ jobs:
           ISSUE_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER)
           echo "Issue Response: $ISSUE_RESPONSE"
 
-          PROJECT_IDS=$(echo "$ISSUE_RESPONSE" | jq -r '.project_cards[].project_url | split("/")[-1]')
+          PROJECT_CARDS_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.timeline_url')
+          if [ "$PROJECT_CARDS_URL" == "null" ]; then
+            echo "No project associated with this issue or pull request."
+            exit 0
+          fi
+
+          PROJECT_CARDS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" "$PROJECT_CARDS_URL")
+          PROJECT_IDS=$(echo "$PROJECT_CARDS_RESPONSE" | jq -r '.[] | select(.project_card) | .project_card.project_id')
           if [ -z "$PROJECT_IDS" ]; then
             echo "No project associated with this issue or pull request."
             exit 0
