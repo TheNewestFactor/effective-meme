@@ -21,7 +21,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PROJECT_ID="4905915"  # Update with your new project ID
+          PROJECT_ID="YOUR_PROJECT_ID"  # Update with your new project ID
           REPO=${{ github.repository }}
           ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
           ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
@@ -29,41 +29,19 @@ jobs:
           echo "Fetching project details for project $PROJECT_ID..."
           PROJECT_QUERY='
           {
-            node(id: "'"$PROJECT_ID"'") {
-              ... on ProjectNext {
-                id
-                title
-                fields(first: 20) {
-                  nodes {
-                    id
-                    name
-                    settings
-                  }
-                }
-              }
-            }
+            "query": "query { node(id: \\"'"$PROJECT_ID"'\\") { ... on ProjectNext { id title fields(first: 20) { nodes { id name settings } } } } }"
           }
           '
-          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$PROJECT_QUERY\"}" https://api.github.com/graphql)
+          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
           echo "Project Response: $PROJECT_RESPONSE"
 
           echo "Fetching columns for project $PROJECT_ID..."
           COLUMNS_QUERY='
           {
-            node(id: "'"$PROJECT_ID"'") {
-              ... on ProjectNext {
-                id
-                views(first: 20) {
-                  nodes {
-                    id
-                    name
-                  }
-                }
-              }
-            }
+            "query": "query { node(id: \\"'"$PROJECT_ID"'\\") { ... on ProjectNext { id views(first: 20) { nodes { id name } } } } }"
           }
           '
-          COLUMNS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$COLUMNS_QUERY\"}" https://api.github.com/graphql)
+          COLUMNS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$COLUMNS_QUERY" https://api.github.com/graphql)
           echo "Columns Response: $COLUMNS_RESPONSE"
 
           BOT_COLUMN_ID=$(echo "$COLUMNS_RESPONSE" | jq -r '.data.node.views.nodes[] | select(.name == "BotCreate") | .id')
@@ -77,26 +55,18 @@ jobs:
 
           # Adding item to the BotCreate column
           ADD_ITEM_MUTATION='
-          mutation {
-            addProjectNextItem(input: {projectId: "'"$PROJECT_ID"'", contentId: "'"$ISSUE_NUMBER"'"}) {
-              projectNextItem {
-                id
-              }
-            }
+          {
+            "query": "mutation { addProjectNextItem(input: {projectId: \\"'"$PROJECT_ID"'\\", contentId: \\"'"$ISSUE_NUMBER"'\\") { projectNextItem { id } } }"
           }
           '
-          ADD_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$ADD_ITEM_MUTATION\"}" https://api.github.com/graphql)
+          ADD_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$ADD_ITEM_MUTATION" https://api.github.com/graphql)
           echo "Add Item Response: $ADD_ITEM_RESPONSE"
 
           # Move item to the BotCreate column
           MOVE_ITEM_MUTATION='
-          mutation {
-            updateProjectNextItemField(input: {projectId: "'"$PROJECT_ID"'", itemId: "'"$(echo $ADD_ITEM_RESPONSE | jq -r .data.addProjectNextItem.projectNextItem.id)"'", fieldId: "'"$BOT_COLUMN_ID"'", value: "BotCreate"}) {
-              projectNextItem {
-                id
-              }
-            }
+          {
+            "query": "mutation { updateProjectNextItemField(input: {projectId: \\"'"$PROJECT_ID"'\\", itemId: \\"'$(echo $ADD_ITEM_RESPONSE | jq -r .data.addProjectNextItem.projectNextItem.id)'\\", fieldId: \\"'"$BOT_COLUMN_ID"'\\", value: \\"BotCreate\\"}) { projectNextItem { id } } }"
           }
           '
-          MOVE_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$MOVE_ITEM_MUTATION\"}" https://api.github.com/graphql)
+          MOVE_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$MOVE_ITEM_MUTATION" https://api.github.com/graphql)
           echo "Move Item Response: $MOVE_ITEM_RESPONSE"
