@@ -40,48 +40,45 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
-      - name: Debug project details
-        id: debug-project
+      - name: Find associated project
+        id: find-project
         run: |
-          PROJECT_ID=8  # Provided project ID
-          echo "Fetching details for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID} --jq '.title'
-          echo "Fetching views for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID}/views --jq '.[] | .name'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get project view ID
-        id: get-view-id
-        run: |
-          PROJECT_ID=4905915  # Provided project ID
-          VIEW_NAME="${{ env.column }}"
-          VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
-          if [ -z "$VIEW_ID" ]; then
-            echo "No view found or view ID could not be retrieved."
+          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
+          PROJECTS=$(gh api -X GET /issues/${ISSUE_OR_PR_NUMBER}/projects --jq '.[] | .id')
+          if [ -z "$PROJECTS" ]; then
+            echo "No associated project found."
             exit 1
           fi
-          echo "view_id=$VIEW_ID" >> $GITHUB_ENV
+          echo "project_ids=$PROJECTS" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get project card ID
-        id: get-card-id
+      - name: Find project view ID
+        id: get-view-id
+        run: |
+          PROJECT_IDS=(${{ env.project_ids }})
+          VIEW_NAME="${{ env.column }}"
+          for PROJECT_ID in "${PROJECT_IDS[@]}"; do
+            VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
+            if [ -n "$VIEW_ID" ]; then
+              echo "view_id=$VIEW_ID" >> $GITHUB_ENV
+              echo "project_id=$PROJECT_ID" >> $GITHUB_ENV
+              break
+            fi
+          done
+          if [ -z "$VIEW_ID" ]; then
+            echo "No view found for project."
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move issue or PR to project column
         run: |
           ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
           VIEW_ID=${{ env.view_id }}
-          CARD_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns/${VIEW_ID}/cards --jq ".[] | select(.content_id == $ISSUE_OR_PR_NUMBER and .content_type == \"Issue\") | .id")
-          if [ -z "$CARD_ID" ]; then
-            echo "No card found or card ID could not be retrieved."
-            exit 1
-          fi
-          echo "card_id=$CARD_ID" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update project card status
-        run: |
-          CARD_ID=${{ env.card_id }}
-          gh api -X PATCH /projects/${PROJECT_ID}/columns/cards/${CARD_ID} -f column_id="${{ env.view_id }}"
+          gh api -X POST /projects/${PROJECT_ID}/columns/${VIEW_ID}/cards \
+            -f content_id=$ISSUE_OR_PR_NUMBER \
+            -f content_type=Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
