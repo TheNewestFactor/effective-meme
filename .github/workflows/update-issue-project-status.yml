@@ -63,7 +63,7 @@ jobs:
           EOF
           )
           echo "Fetching project details for project ID 4905915"
-          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
+          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_QUERY}\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
 
           # Print and validate the response
@@ -95,7 +95,7 @@ jobs:
           }
           EOF
           )
-          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
+          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_QUERY}\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
 
           # Print and validate the response
@@ -137,6 +137,6 @@ jobs:
           EOF
           )
           echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to column ID $COLUMN_ID"
-          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_MUTATION\"}" https://api.github.com/graphql
+          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_MUTATION}\"}" https://api.github.com/graphql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
