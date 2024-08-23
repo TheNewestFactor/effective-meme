@@ -42,6 +42,8 @@ jobs:
 
           if [ -z "$COLUMN_ID" ]; then
             echo "Column $STATUS not found in the project."
+            echo "Available columns:"
+            curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '.[] | .name'
             exit 1
           fi
 
