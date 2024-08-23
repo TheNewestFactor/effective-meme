@@ -65,6 +65,13 @@ jobs:
           echo "Fetching project details for project ID 4905915"
           RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
+
+          # Print and validate the response
+          echo "$RESPONSE" | jq .  # Pretty print the response
+          if echo "$RESPONSE" | jq '.data.node.columns.nodes' | grep -q 'null'; then
+            echo "Columns data is null or not found."
+            exit 1
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -91,11 +98,10 @@ jobs:
           RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
 
-          # Print the response and check if it's valid JSON
-          if echo "$RESPONSE" | jq empty; then
-            echo "The response is valid JSON."
-          else
-            echo "The response is not valid JSON."
+          # Print and validate the response
+          echo "$RESPONSE" | jq .  # Pretty print the response
+          if echo "$RESPONSE" | jq '.data.node.columns.nodes' | grep -q 'null'; then
+            echo "Columns data is null or not found."
             exit 1
           fi
 
