@@ -17,7 +17,7 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install jq
 
-      - name: Get Project Details
+      - name: Get Project Details and Create Column if Needed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -37,6 +37,26 @@ jobs:
             echo "Failed to fetch columns for project $PROJECT_ID. Please check the token permissions and API endpoint."
             exit 1
           fi
+
+          BOT_COLUMN_ID=$(echo "$COLUMNS" | jq -r '.[] | select(.name == "BotCreate") | .id')
+
+          if [ -z "$BOT_COLUMN_ID" ]; then
+            echo "Creating column 'BotCreate'..."
+            CREATE_COLUMN_RESPONSE=$(curl -s -w "%{http_code}" -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" -d '{"name":"BotCreate"}' https://api.github.com/projects/$PROJECT_ID/columns)
+            CREATE_COLUMN_HTTP_STATUS=$(echo "$CREATE_COLUMN_RESPONSE" | tail -n1)
+            CREATE_COLUMN=$(echo "$CREATE_COLUMN_RESPONSE" | head -n-1)
+            echo "Create Column HTTP Status: $CREATE_COLUMN_HTTP_STATUS"
+            echo "Create Column Response: $CREATE_COLUMN"
+
+            if [ "$CREATE_COLUMN_HTTP_STATUS" -ne 201 ]; then
+              echo "Failed to create column 'BotCreate'. Please check the token permissions and API endpoint."
+              exit 1
+            fi
+
+            BOT_COLUMN_ID=$(echo "$CREATE_COLUMN" | jq -r '.id')
+          fi
+
+          echo "Column 'BotCreate' ID: $BOT_COLUMN_ID"
 
           echo "$COLUMNS" | jq -c '.[]' | while read column; do
             COLUMN_ID=$(echo "$column" | jq -r '.id')
