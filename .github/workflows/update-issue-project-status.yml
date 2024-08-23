@@ -5,7 +5,7 @@
 # file with configuration.  For more information, see:
 # https://github.com/actions/labeler
 
-name: Update Issue Project Status
+name: Update Issue Project Status and Debug
 
 on:
   issues:
@@ -19,13 +19,24 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v3
 
-      - name: Update Project Status
+      - name: Debug Project and Columns
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL=${{ github.event.label.name }}
           ISSUE_NUMBER=${{ github.event.issue.number }}
           REPO=${{ github.repository }}
+
+          echo "Fetching issue details..."
+          ISSUE_DETAILS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER)
+          echo "Issue Details: $ISSUE_DETAILS"
+
+          PROJECT_ID=4905915
+          COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
+
+          echo "Fetching available columns from: $COLUMNS_URL"
+          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
+          echo "Available columns response: $AVAILABLE_COLUMNS"
 
           if [ "$LABEL" = "bug" ]; then
             STATUS="Security"
@@ -35,17 +46,6 @@ jobs:
             STATUS="Backlog"
           fi
 
-          echo "Fetching project ID..."
-          PROJECT_ID=4905915  # Directly use the known project ID
-          echo "Project ID: $PROJECT_ID"
-
-          ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
-          COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
-
-          echo "Fetching available columns from: $COLUMNS_URL"
-          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
-          echo "Available columns response: $AVAILABLE_COLUMNS"
-
           COLUMN_ID=$(echo "$AVAILABLE_COLUMNS" | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
 
           if [ -z "$COLUMN_ID" ]; then
@@ -53,4 +53,5 @@ jobs:
             exit 1
           fi
 
+          ISSUE_URL=$(echo "$ISSUE_DETAILS" | jq -r '.html_url')
           curl -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards -d "{\"content_url\":\"$ISSUE_URL\"}"
