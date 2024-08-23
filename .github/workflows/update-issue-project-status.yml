@@ -29,6 +29,9 @@ jobs:
           ISSUE_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER)
           echo "Issue Response: $ISSUE_RESPONSE"
 
+          LABELS=$(echo "$ISSUE_RESPONSE" | jq -r '.labels[] | .name')
+          echo "Labels: $LABELS"
+
           PROJECT_CARDS_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.timeline_url')
           if [ "$PROJECT_CARDS_URL" == "null" ]; then
             echo "No project associated with this issue or pull request."
@@ -47,5 +50,5 @@ jobs:
             PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on ProjectNext { id title } } }"}')
             PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
             PROJECT_NAME=$(echo "$PROJECT_RESPONSE" | jq -r '.data.node.title')
-            echo "Project Name: $PROJECT_NAME"
+            echo "Label: $LABELS, Issue/PR Number: $ISSUE_NUMBER, Project Name: $PROJECT_NAME"
           done
