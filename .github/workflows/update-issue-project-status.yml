@@ -35,12 +35,23 @@ jobs:
             STATUS="Backlog"
           fi
 
+          echo "Fetching project ID..."
           PROJECT_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/projects | jq -r '.[0].id')
+          echo "Project ID: $PROJECT_ID"
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Project ID not found."
+            exit 1
+          fi
+
           ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
           COLUMNS_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID | jq -r '.columns_url')
           
+          echo "Fetching available columns from: $COLUMNS_URL"
+          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '.[] | .name')
+
           echo "Available columns:"
-          curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '.[] | .name'
+          echo "$AVAILABLE_COLUMNS"
 
           COLUMN_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
 
