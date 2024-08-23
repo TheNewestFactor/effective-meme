@@ -63,7 +63,8 @@ jobs:
           EOF
           )
           echo "Fetching project details for project ID 4905915"
-          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql
+          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
+          echo "Response: $RESPONSE"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -87,7 +88,9 @@ jobs:
           }
           EOF
           )
-          COLUMN_ID=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql | jq -r --arg COLUMN_NAME "$COLUMN_NAME" '.data.node.columns.nodes[] | select(.name == $COLUMN_NAME) | .id')
+          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
+          echo "Response: $RESPONSE"
+          COLUMN_ID=$(echo "$RESPONSE" | jq -r --arg COLUMN_NAME "$COLUMN_NAME" '.data.node.columns.nodes[] | select(.name == $COLUMN_NAME) | .id')
           if [ -z "$COLUMN_ID" ]; then
             echo "No column found for name $COLUMN_NAME."
             exit 1
