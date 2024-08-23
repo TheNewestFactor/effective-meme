@@ -21,7 +21,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PROJECT_ID="4905915"
+          PROJECT_ID="8"
 
           echo "Fetching project details for project $PROJECT_ID..."
           PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on Project { id name body } } }"}')
