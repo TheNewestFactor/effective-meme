@@ -40,37 +40,28 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
-      - name: Debug project details
-        id: debug-project
-        run: |
-          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          echo "Fetching projects for issue/pr number $ISSUE_OR_PR_NUMBER"
-          gh api -X GET /projects/columns/cards --jq ".[] | select(.content_id == $ISSUE_OR_PR_NUMBER) | .project_id"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Find project view ID
-        id: get-view-id
+      - name: Get project column ID
+        id: get-project-column-id
         run: |
           PROJECT_ID=4905915  # Replace with your project ID
-          VIEW_NAME="${{ env.column }}"
-          echo "Fetching views for project ID $PROJECT_ID"
-          VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
-          if [ -z "$VIEW_ID" ]; then
-            echo "No view found for project."
+          COLUMN_NAME="${{ env.column }}"
+          echo "Fetching columns for project ID $PROJECT_ID"
+          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
+          if [ -z "$COLUMN_ID" ]; then
+            echo "No column found for name $COLUMN_NAME."
             exit 1
           fi
-          echo "view_id=$VIEW_ID" >> $GITHUB_ENV
+          echo "column_id=$COLUMN_ID" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Move issue or PR to project column
         run: |
           ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          VIEW_ID=${{ env.view_id }}
-          echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to view ID $VIEW_ID"
-          gh api -X POST /projects/columns/${VIEW_ID}/cards \
-            -f content_id=$ISSUE_OR_PR_NUMBER \
+          COLUMN_ID=${{ env.column_id }}
+          echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to column ID $COLUMN_ID"
+          gh api -X POST /projects/columns/${COLUMN_ID}/cards \
+            -f content_id=${ISSUE_OR_PR_NUMBER} \
             -f content_type=Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
