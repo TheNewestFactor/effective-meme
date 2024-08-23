@@ -8,8 +8,6 @@
 name: Update Project Status Based on Label
 
 on:
-  label:
-    types: [created, removed]
   issues:
     types: [labeled, unlabeled]
   pull_request:
@@ -23,7 +21,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up GitHub CLI
-        uses: cli/cli-action@v1
+        uses: cli/cli-action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -41,8 +39,10 @@ jobs:
 
       - name: Update project column
         run: |
-          gh api -X PATCH /repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/projects \
-            -f project_column="${{ env.column }}"
+          ISSUE_OR_PR=${{ github.event.issue.number || github.event.pull_request.number }}
+          gh repo view ${{ github.repository }} --json projects --jq '.projects[0].id' | xargs -I {} gh api -X POST /projects/{}/columns --field name="${{ env.column }}"
+          gh api -X PATCH /repos/${{ github.repository }}/issues/${{ ISSUE_OR_PR }}/projects \
+            -f project_column_id="${{ column_id }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
