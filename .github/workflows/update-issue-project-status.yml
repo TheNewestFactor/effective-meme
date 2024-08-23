@@ -40,13 +40,24 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
+      - name: Debug project information
+        id: debug-project
+        run: |
+          PROJECT_ID=4905915  # Replace with your project ID
+          echo "Fetching project details for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID} || exit 1
+          echo "Fetching columns for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID}/columns || exit 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get project column ID
         id: get-project-column-id
         run: |
           PROJECT_ID=4905915  # Replace with your project ID
           COLUMN_NAME="${{ env.column }}"
           echo "Fetching columns for project ID $PROJECT_ID"
-          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
+          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
           if [ -z "$COLUMN_ID" ]; then
             echo "No column found for name $COLUMN_NAME."
             exit 1
