@@ -1,75 +1,55 @@
-name: Update Project Status Based on Label
+name: Check Project Assignment
 
 on:
   issues:
-    types: [labeled, unlabeled]
+    types: [opened, reopened, edited]
   pull_request:
-    types: [labeled, unlabeled]
+    types: [opened, reopened, edited]
 
 jobs:
-  update-status:
+  check-project-assignment:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Check out the repository
         uses: actions/checkout@v3
 
-      - name: Set up GitHub CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gh
-          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      - name: Set up jq
+        run: sudo apt-get install jq
 
-      - name: Determine project column based on label
-        id: determine-column
-        run: |
-          LABEL=${{ github.event.label.name }}
-          if [[ "$LABEL" == "bug" ]]; then
-            echo "column=Security" >> $GITHUB_ENV
-          elif [[ "$LABEL" == "feature-request" ]]; then
-            echo "column=Enhancement" >> $GITHUB_ENV
-          else
-            echo "column=Backlog" >> $GITHUB_ENV
-          fi
-
-      - name: Get issue or PR number
-        id: get-issue-pr-number
-        run: |
-          if [[ "${{ github.event.pull_request }}" ]]; then
-            echo "issue_or_pr=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          else
-            echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
-          fi
-
-      - name: Debug project details
-        id: debug-project
-        run: |
-          PROJECT_ID=8  # Provided project ID
-          echo "Fetching details for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID} --jq '.name'
-          echo "Fetching columns for project ID $PROJECT_ID"
-          gh api -X GET /projects/${PROJECT_ID}/columns --jq '.[] | .name'
+      - name: Get Projects
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get project column ID
-        id: get-column-id
         run: |
-          PROJECT_ID=4905915  # Provided project ID
-          COLUMN_NAME="${{ env.column }}"
-          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
-          if [ -z "$COLUMN_ID" ]; then
-            echo "No column found or column ID could not be retrieved."
-            exit 1
-          fi
-          echo "column_id=$COLUMN_ID" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO=${{ github.repository }}
+          ISSUE_NUMBER=${{ github.event.issue.number || github.event.pull_request.number }}
+          ISSUE_TYPE=${{ github.event.issue ? 'issues' : 'pulls' }}
 
-      - name: Update project column
-        run: |
-          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          gh api -X POST /projects/${{ env.project_id }}/columns/${{ env.column_id }}/cards \
-            -f content_id=$ISSUE_OR_PR_NUMBER \
-            -f content_type=Issue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "Fetching projects for repository..."
+          PROJECTS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/projects)
+          echo "Projects: $PROJECTS"
+
+          echo "$PROJECTS" | jq -c '.[]' | while read project; do
+            PROJECT_ID=$(echo "$project" | jq -r '.id')
+            PROJECT_NAME=$(echo "$project" | jq -r '.name')
+
+            echo "Fetching columns for project $PROJECT_NAME..."
+            COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns)
+            echo "Columns: $COLUMNS"
+
+            echo "$COLUMNS" | jq -c '.[]' | while read column; do
+              COLUMN_ID=$(echo "$column" | jq -r '.id')
+              COLUMN_NAME=$(echo "$column" | jq -r '.name')
+
+              echo "Checking cards in column $COLUMN_NAME..."
+              CARDS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards)
+              echo "Cards: $CARDS"
+
+              CARD_URL=$(echo "$CARDS" | jq -r --arg ISSUE_URL "https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER" '.[] | select(.content_url == $ISSUE_URL) | .content_url')
+
+              if [ -n "$CARD_URL" ]; then
+                echo "Issue/PR found in project $PROJECT_NAME (ID: $PROJECT_ID), column $COLUMN_NAME"
+                exit 0
+              fi
+            done
+          done
