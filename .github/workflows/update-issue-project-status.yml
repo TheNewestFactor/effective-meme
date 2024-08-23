@@ -40,6 +40,17 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
+      - name: Debug project details
+        id: debug-project
+        run: |
+          PROJECT_ID=4905915  # Provided project ID
+          echo "Fetching details for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID} --jq '.name'
+          echo "Fetching columns for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID}/columns --jq '.[] | .name'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get project column ID
         id: get-column-id
         run: |
