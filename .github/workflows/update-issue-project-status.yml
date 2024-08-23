@@ -26,7 +26,7 @@ jobs:
           LABEL=${{ github.event.label.name }}
           ISSUE_NUMBER=${{ github.event.issue.number }}
           REPO=${{ github.repository }}
-          
+
           if [ "$LABEL" = "bug" ]; then
             STATUS="Security"
           elif [ "$LABEL" = "feature-request" ]; then
@@ -36,17 +36,12 @@ jobs:
           fi
 
           echo "Fetching project ID..."
-          PROJECT_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/projects | jq -r '.[0].id')
+          PROJECT_ID=8  # Directly use the known project ID
           echo "Project ID: $PROJECT_ID"
 
-          if [ -z "$PROJECT_ID" ]; then
-            echo "Project ID not found."
-            exit 1
-          fi
-
           ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
-          COLUMNS_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns)
-          
+          COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
+
           echo "Fetching available columns from: $COLUMNS_URL"
           AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '.[] | .name')
 
