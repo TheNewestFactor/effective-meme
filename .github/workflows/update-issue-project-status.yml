@@ -1,10 +1,10 @@
-name: Check Project Assignment
+name: Check Project Assignment on Label Change
 
 on:
   issues:
-    types: [opened, reopened, edited]
+    types: [labeled]
   pull_request:
-    types: [opened, reopened, edited]
+    types: [labeled]
 
 jobs:
   check-project-assignment:
