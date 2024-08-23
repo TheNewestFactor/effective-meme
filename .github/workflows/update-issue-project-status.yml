@@ -38,6 +38,11 @@ jobs:
           AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
           echo "Available columns response: $AVAILABLE_COLUMNS"
 
+          if [ -z "$AVAILABLE_COLUMNS" ]; then
+            echo "No columns found in the project."
+            exit 1
+          fi
+
           if [ "$LABEL" = "bug" ]; then
             STATUS="Security"
           elif [ "$LABEL" = "feature-request" ]; then
