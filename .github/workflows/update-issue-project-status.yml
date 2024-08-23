@@ -1,54 +1,87 @@
-name: Fetch Associated Project
+name: Update Project Status Based on Label
 
 on:
   issues:
-    types: [labeled]
+    types: [labeled, unlabeled]
   pull_request:
-    types: [labeled]
+    types: [labeled, unlabeled]
 
 jobs:
-  fetch-associated-project:
+  update-status:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out the repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up jq
-        run: sudo apt-get install jq
+      - name: Set up GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
-      - name: Fetch Associated Project
+      - name: Determine project column based on label
+        id: determine-column
+        run: |
+          LABEL=${{ github.event.label.name }}
+          if [[ "$LABEL" == "bug" ]]; then
+            echo "column=Security" >> $GITHUB_ENV
+          elif [[ "$LABEL" == "feature-request" ]]; then
+            echo "column=Enhancement" >> $GITHUB_ENV
+          else
+            echo "column=Backlog" >> $GITHUB_ENV
+          fi
+
+      - name: Get issue or PR number
+        id: get-issue-pr-number
+        run: |
+          if [[ "${{ github.event.pull_request }}" ]]; then
+            echo "issue_or_pr=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          else
+            echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
+          fi
+
+      - name: Debug project details
+        id: debug-project
+        run: |
+          PROJECT_ID=4905915  # Provided project ID
+          echo "Fetching details for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID} --jq '.title'
+          echo "Fetching views for project ID $PROJECT_ID"
+          gh api -X GET /projects/${PROJECT_ID}/views --jq '.[] | .name'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get project view ID
+        id: get-view-id
         run: |
-          REPO=${{ github.repository }}
-          ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
-          ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
-
-          echo "Fetching issue or pull request details..."
-          ISSUE_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER)
-          echo "Issue Response: $ISSUE_RESPONSE"
-
-          LABELS=$(echo "$ISSUE_RESPONSE" | jq -r '.labels[] | .name')
-          echo "Labels: $LABELS"
-
-          PROJECT_CARDS_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.timeline_url')
-          if [ "$PROJECT_CARDS_URL" == "null" ]; then
-            echo "No project associated with this issue or pull request."
-            exit 0
+          PROJECT_ID=4905915  # Provided project ID
+          VIEW_NAME="${{ env.column }}"
+          VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
+          if [ -z "$VIEW_ID" ]; then
+            echo "No view found or view ID could not be retrieved."
+            exit 1
           fi
+          echo "view_id=$VIEW_ID" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          PROJECT_CARDS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" "$PROJECT_CARDS_URL")
-          PROJECT_IDS=$(echo "$PROJECT_CARDS_RESPONSE" | jq -r '.[] | select(.project_card) | .project_card.project_id')
-          if [ -z "$PROJECT_IDS" ]; then
-            echo "No project associated with this issue or pull request."
-            exit 0
+      - name: Get project card ID
+        id: get-card-id
+        run: |
+          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
+          VIEW_ID=${{ env.view_id }}
+          CARD_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns/${VIEW_ID}/cards --jq ".[] | select(.content_id == $ISSUE_OR_PR_NUMBER and .content_type == \"Issue\") | .id")
+          if [ -z "$CARD_ID" ]; then
+            echo "No card found or card ID could not be retrieved."
+            exit 1
           fi
+          echo "card_id=$CARD_ID" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          for PROJECT_ID in $PROJECT_IDS; do
-            echo "Fetching project details for project $PROJECT_ID..."
-            PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on ProjectNext { id title } } }"}')
-            PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
-            PROJECT_NAME=$(echo "$PROJECT_RESPONSE" | jq -r '.data.node.title')
-            echo "Label: $LABELS, Issue/PR Number: $ISSUE_NUMBER, Project Name: $PROJECT_NAME"
-          done
+      - name: Update project card status
+        run: |
+          CARD_ID=${{ env.card_id }}
+          gh api -X PATCH /projects/${PROJECT_ID}/columns/cards/${CARD_ID} -f column_id="${{ env.view_id }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
