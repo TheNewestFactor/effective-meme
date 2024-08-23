@@ -43,7 +43,7 @@ jobs:
       - name: Debug project details
         id: debug-project
         run: |
-          PROJECT_ID=4905915  # Provided project ID
+          PROJECT_ID=8  # Provided project ID
           echo "Fetching details for project ID $PROJECT_ID"
           gh api -X GET /projects/${PROJECT_ID} --jq '.title'
           echo "Fetching views for project ID $PROJECT_ID"
