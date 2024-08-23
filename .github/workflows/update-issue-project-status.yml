@@ -1,14 +1,13 @@
-name: Update Project Status Based on Label
+name: Handle Labels and Project Information
 
 on:
   issues:
     types: [labeled, unlabeled]
-  pull_request:
-    types: [labeled, unlabeled]
 
 jobs:
-  update-status:
+  find-project:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -19,42 +18,61 @@ jobs:
           sudo apt-get install -y gh
           echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
-      - name: Determine project column based on label
-        id: determine-column
+      - name: Get issue number
+        id: get-issue-number
         run: |
-          LABEL=${{ github.event.label.name }}
-          if [[ "$LABEL" == "bug" ]]; then
-            echo "column=Security" >> $GITHUB_ENV
-          elif [[ "$LABEL" == "feature-request" ]]; then
-            echo "column=Enhancement" >> $GITHUB_ENV
-          else
-            echo "column=Backlog" >> $GITHUB_ENV
-          fi
+          ISSUE_NUMBER=${{ github.event.issue.number }}
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_ENV
 
-      - name: Get issue or PR number
-        id: get-issue-pr-number
+      - name: Get repository ID
+        id: get-repo-id
         run: |
-          if [[ "${{ github.event.pull_request }}" ]]; then
-            echo "issue_or_pr=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-            echo "is_pr=true" >> $GITHUB_ENV
-          else
-            echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
-            echo "is_pr=false" >> $GITHUB_ENV
-          fi
+          REPO_ID=$(gh repo view ${{ github.repository }} --json id -q '.id')
+          echo "repo_id=$REPO_ID" >> $GITHUB_ENV
 
-      - name: Debug project information
-        id: debug-project
+      - name: Query GitHub GraphQL API
+        id: graphql-query
         run: |
           GRAPHQL_QUERY=$(cat <<EOF
-          {
+          query {
+            repository(owner: "${{ github.repository_owner }}", name: "${{ github.repository_name }}") {
+              projectsV2(first: 5) {
+                nodes {
+                  id
+                  title
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          id
+                        }
+                        ... on PullRequest {
+                          id
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
             node(id: "UHJvamVjdDo0OTA1OTE1") {
               ... on ProjectV2 {
                 id
                 title
-                columns(first: 10) {
+                items(first: 10) {
                   nodes {
                     id
-                    name
+                    content {
+                      ... on Issue {
+                        id
+                        title
+                      }
+                      ... on PullRequest {
+                        id
+                        title
+                      }
+                    }
                   }
                 }
               }
@@ -62,81 +80,29 @@ jobs:
           }
           EOF
           )
-          echo "Fetching project details for project ID 4905915"
-          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_QUERY}\"}" https://api.github.com/graphql)
+          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
-
-          # Print and validate the response
-          echo "$RESPONSE" | jq .  # Pretty print the response
-          if echo "$RESPONSE" | jq '.data.node.columns.nodes' | grep -q 'null'; then
-            echo "Columns data is null or not found."
-            exit 1
-          fi
+          echo "$RESPONSE" | jq .  # Print and format the response for debugging
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get project column ID
-        id: get-project-column-id
+      - name: Parse project information
+        id: parse-project-info
         run: |
-          COLUMN_NAME="${{ env.column }}"
-          echo "Fetching column ID for column name $COLUMN_NAME"
-          GRAPHQL_QUERY=$(cat <<EOF
-          {
-            node(id: "UHJvamVjdDo0OTA1OTE1") {
-              ... on ProjectV2 {
-                columns(first: 10) {
-                  nodes {
-                    id
-                    name
-                  }
-                }
-              }
-            }
-          }
-          EOF
-          )
-          RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_QUERY}\"}" https://api.github.com/graphql)
-          echo "Response: $RESPONSE"
-
-          # Print and validate the response
-          echo "$RESPONSE" | jq .  # Pretty print the response
-          if echo "$RESPONSE" | jq '.data.node.columns.nodes' | grep -q 'null'; then
-            echo "Columns data is null or not found."
+          # Extract project information
+          PROJECT_INFO=$(echo "${{ steps.graphql-query.outputs.RESPONSE }}" | jq -r '.data.repository.projectsV2.nodes[] | select(.items.nodes[]?.content.id == ${{ env.issue_number }}) | {id: .id, title: .title}')
+          if [ -z "$PROJECT_INFO" ]; then
+            echo "No project found associated with the issue or repository."
             exit 1
           fi
-
-          # Extract the column ID
-          COLUMN_ID=$(echo "$RESPONSE" | jq -r --arg COLUMN_NAME "$COLUMN_NAME" '.data.node.columns.nodes[] | select(.name == $COLUMN_NAME) | .id')
-          if [ -z "$COLUMN_ID" ]; then
-            echo "No column found for name $COLUMN_NAME."
-            exit 1
-          fi
-          echo "column_id=$COLUMN_ID" >> $GITHUB_ENV
+          echo "Project Info: $PROJECT_INFO"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Move issue or PR to project column
+      - name: Debug Project Information
         run: |
-          PROJECT_ID="4905915"  # Provided project ID
-          COLUMN_ID=${{ env.column_id }}
-          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          IS_PR=${{ env.is_pr }}
-          CONTENT_TYPE="Issue"
-          if [ "$IS_PR" = "true" ]; then
-            CONTENT_TYPE="PullRequest"
-          fi
-
-          GRAPHQL_MUTATION=$(cat <<EOF
-          mutation {
-            addProjectV2ItemById(input: {projectId: "$PROJECT_ID", contentId: "$ISSUE_OR_PR_NUMBER", contentType: $CONTENT_TYPE}) {
-              item {
-                id
-              }
-            }
-          }
-          EOF
-          )
-          echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to column ID $COLUMN_ID"
-          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"${GRAPHQL_MUTATION}\"}" https://api.github.com/graphql
+          echo "Debugging project information..."
+          echo "Repository ID: ${{ env.repo_id }}"
+          echo "Issue Number: ${{ env.issue_number }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
