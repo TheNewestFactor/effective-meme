@@ -50,7 +50,7 @@ jobs:
       - name: Fetch project columns
         id: fetch-columns
         run: |
-          PROJECT_NAME="Your Project Name"  # Replace with your project name
+          PROJECT_NAME="Other user say whaaat"  # Replace with your project name
           REPO=${{ github.repository }}
           PROJECT_ID=$(gh api -X GET /repos/${REPO}/projects --jq ".[] | select(.name == \"${PROJECT_NAME}\") | .id")
           if [ -z "$PROJECT_ID" ]; then
