@@ -50,8 +50,9 @@ jobs:
       - name: Fetch project columns
         id: fetch-columns
         run: |
+          PROJECT_NAME="Your Project Name"  # Replace with your project name
           REPO=${{ github.repository }}
-          PROJECT_ID=$(gh api -X GET /repos/${REPO}/projects --jq '.[] | select(.name == "Project Name") | .id')
+          PROJECT_ID=$(gh api -X GET /repos/${REPO}/projects --jq ".[] | select(.name == \"${PROJECT_NAME}\") | .id")
           if [ -z "$PROJECT_ID" ]; then
             echo "No project found or project ID could not be retrieved."
             exit 1
