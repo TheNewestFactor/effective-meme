@@ -90,6 +90,16 @@ jobs:
           )
           RESPONSE=$(curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" -X POST -d "{\"query\": \"$GRAPHQL_QUERY\"}" https://api.github.com/graphql)
           echo "Response: $RESPONSE"
+
+          # Print the response and check if it's valid JSON
+          if echo "$RESPONSE" | jq empty; then
+            echo "The response is valid JSON."
+          else
+            echo "The response is not valid JSON."
+            exit 1
+          fi
+
+          # Extract the column ID
           COLUMN_ID=$(echo "$RESPONSE" | jq -r --arg COLUMN_NAME "$COLUMN_NAME" '.data.node.columns.nodes[] | select(.name == $COLUMN_NAME) | .id')
           if [ -z "$COLUMN_ID" ]; then
             echo "No column found for name $COLUMN_NAME."
