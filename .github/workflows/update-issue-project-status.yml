@@ -17,7 +17,7 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install jq
 
-      - name: Get Project Details and Create Column if Needed
+      - name: Get Project Details and Provide Information
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -25,6 +25,18 @@ jobs:
           REPO=${{ github.repository }}
           ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
           ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
+
+          echo "Fetching project details for project $PROJECT_ID..."
+          PROJECT_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID)
+          PROJECT_HTTP_STATUS=$(echo "$PROJECT_RESPONSE" | tail -n1)
+          PROJECT=$(echo "$PROJECT_RESPONSE" | head -n-1)
+          echo "Project HTTP Status: $PROJECT_HTTP_STATUS"
+          echo "Project Details: $PROJECT"
+
+          if [ "$PROJECT_HTTP_STATUS" -ne 200 ]; then
+            echo "Failed to fetch project details for project $PROJECT_ID. Please check the token permissions and API endpoint."
+            exit 1
+          fi
 
           echo "Fetching columns for project $PROJECT_ID..."
           COLUMNS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns)
