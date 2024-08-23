@@ -36,8 +36,9 @@ jobs:
           fi
 
           PROJECT_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/projects | jq -r '.[0].id')
-          ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
-          COLUMN_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
+          ISSUE_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER | jq -r '.html_url')
+          COLUMNS_URL=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID | jq -r '.columns_url')
+          COLUMN_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
 
           if [ -z "$COLUMN_ID" ]; then
             echo "Column $STATUS not found in the project."
