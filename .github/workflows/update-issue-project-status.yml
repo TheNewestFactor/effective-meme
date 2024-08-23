@@ -29,15 +29,23 @@ jobs:
           ISSUE_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER)
           echo "Issue Response: $ISSUE_RESPONSE"
 
-          PROJECT_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.projects_url')
-          if [ "$PROJECT_URL" == "null" ]; then
+          PROJECT_CARDS_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.project_cards_url')
+          if [ "$PROJECT_CARDS_URL" == "null" ]; then
             echo "No project associated with this issue or pull request."
             exit 0
           fi
 
-          echo "Fetching project details..."
-          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" "$PROJECT_URL")
-          echo "Project Response: $PROJECT_RESPONSE"
+          PROJECT_CARDS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" "$PROJECT_CARDS_URL")
+          PROJECT_IDS=$(echo "$PROJECT_CARDS_RESPONSE" | jq -r '.[].project_url | split("/")[-1]')
+          if [ -z "$PROJECT_IDS" ]; then
+            echo "No project associated with this issue or pull request."
+            exit 0
+          fi
 
-          PROJECT_NAME=$(echo "$PROJECT_RESPONSE" | jq -r '.[0].name')
-          echo "Project Name: $PROJECT_NAME"
+          for PROJECT_ID in $PROJECT_IDS; do
+            echo "Fetching project details for project $PROJECT_ID..."
+            PROJECT_QUERY=$(jq -n --arg project_id "$PROJECT_ID" '{"query": "query { node(id: \($project_id)) { ... on ProjectNext { id title } } }"}')
+            PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "$PROJECT_QUERY" https://api.github.com/graphql)
+            PROJECT_NAME=$(echo "$PROJECT_RESPONSE" | jq -r '.data.node.title')
+            echo "Project Name: $PROJECT_NAME"
+          done
