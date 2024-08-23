@@ -17,79 +17,86 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install jq
 
-      - name: Get Project Details and Provide Information
+      - name: Get Project Details and Create Column if Needed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PROJECT_ID=8
+          PROJECT_ID="YOUR_PROJECT_ID"  # Update with your new project ID
           REPO=${{ github.repository }}
           ISSUE_NUMBER=$([[ "${{ github.event_name }}" == "issues" ]] && echo "${{ github.event.issue.number }}" || echo "${{ github.event.pull_request.number }}")
           ISSUE_TYPE=$([[ "${{ github.event_name }}" == "issues" ]] && echo "issues" || echo "pulls")
 
           echo "Fetching project details for project $PROJECT_ID..."
-          PROJECT_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID)
-          PROJECT_HTTP_STATUS=$(echo "$PROJECT_RESPONSE" | tail -n1)
-          PROJECT=$(echo "$PROJECT_RESPONSE" | head -n-1)
-          echo "Project HTTP Status: $PROJECT_HTTP_STATUS"
-          echo "Project Details: $PROJECT"
-
-          if [ "$PROJECT_HTTP_STATUS" -ne 200 ]; then
-            echo "Failed to fetch project details for project $PROJECT_ID. Please check the token permissions and API endpoint."
-            exit 1
-          fi
+          PROJECT_QUERY='
+          {
+            node(id: "'"$PROJECT_ID"'") {
+              ... on ProjectNext {
+                id
+                title
+                fields(first: 20) {
+                  nodes {
+                    id
+                    name
+                    settings
+                  }
+                }
+              }
+            }
+          }
+          '
+          PROJECT_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$PROJECT_QUERY\"}" https://api.github.com/graphql)
+          echo "Project Response: $PROJECT_RESPONSE"
 
           echo "Fetching columns for project $PROJECT_ID..."
-          COLUMNS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/$PROJECT_ID/columns)
-          COLUMNS_HTTP_STATUS=$(echo "$COLUMNS_RESPONSE" | tail -n1)
-          COLUMNS=$(echo "$COLUMNS_RESPONSE" | head -n-1)
-          echo "Columns HTTP Status: $COLUMNS_HTTP_STATUS"
-          echo "Columns: $COLUMNS"
+          COLUMNS_QUERY='
+          {
+            node(id: "'"$PROJECT_ID"'") {
+              ... on ProjectNext {
+                id
+                views(first: 20) {
+                  nodes {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+          '
+          COLUMNS_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$COLUMNS_QUERY\"}" https://api.github.com/graphql)
+          echo "Columns Response: $COLUMNS_RESPONSE"
 
-          if [ "$COLUMNS_HTTP_STATUS" -ne 200 ]; then
-            echo "Failed to fetch columns for project $PROJECT_ID. Please check the token permissions and API endpoint."
-            exit 1
-          fi
-
-          BOT_COLUMN_ID=$(echo "$COLUMNS" | jq -r '.[] | select(.name == "BotCreate") | .id')
+          BOT_COLUMN_ID=$(echo "$COLUMNS_RESPONSE" | jq -r '.data.node.views.nodes[] | select(.name == "BotCreate") | .id')
 
           if [ -z "$BOT_COLUMN_ID" ]; then
-            echo "Creating column 'BotCreate'..."
-            CREATE_COLUMN_RESPONSE=$(curl -s -w "%{http_code}" -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" -d '{"name":"BotCreate"}' https://api.github.com/projects/$PROJECT_ID/columns)
-            CREATE_COLUMN_HTTP_STATUS=$(echo "$CREATE_COLUMN_RESPONSE" | tail -n1)
-            CREATE_COLUMN=$(echo "$CREATE_COLUMN_RESPONSE" | head -n-1)
-            echo "Create Column HTTP Status: $CREATE_COLUMN_HTTP_STATUS"
-            echo "Create Column Response: $CREATE_COLUMN"
-
-            if [ "$CREATE_COLUMN_HTTP_STATUS" -ne 201 ]; then
-              echo "Failed to create column 'BotCreate'. Please check the token permissions and API endpoint."
-              exit 1
-            fi
-
-            BOT_COLUMN_ID=$(echo "$CREATE_COLUMN" | jq -r '.id')
+            echo "Creating column 'BotCreate' is not possible via API for the new Projects (beta). Please create it manually."
+            exit 1
           fi
 
           echo "Column 'BotCreate' ID: $BOT_COLUMN_ID"
 
-          echo "$COLUMNS" | jq -c '.[]' | while read column; do
-            COLUMN_ID=$(echo "$column" | jq -r '.id')
-            COLUMN_NAME=$(echo "$column" | jq -r '.name')
+          # Adding item to the BotCreate column
+          ADD_ITEM_MUTATION='
+          mutation {
+            addProjectNextItem(input: {projectId: "'"$PROJECT_ID"'", contentId: "'"$ISSUE_NUMBER"'"}) {
+              projectNextItem {
+                id
+              }
+            }
+          }
+          '
+          ADD_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$ADD_ITEM_MUTATION\"}" https://api.github.com/graphql)
+          echo "Add Item Response: $ADD_ITEM_RESPONSE"
 
-            echo "Checking cards in column $COLUMN_NAME..."
-            CARDS_RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" https://api.github.com/projects/columns/$COLUMN_ID/cards)
-            CARDS_HTTP_STATUS=$(echo "$CARDS_RESPONSE" | tail -n1)
-            CARDS=$(echo "$CARDS_RESPONSE" | head -n-1)
-            echo "Cards HTTP Status: $CARDS_HTTP_STATUS"
-            echo "Cards: $CARDS"
-
-            if [ "$CARDS_HTTP_STATUS" -ne 200 ]; then
-              echo "Failed to fetch cards for column $COLUMN_NAME. Please check the token permissions and API endpoint."
-              continue
-            fi
-
-            CARD_URL=$(echo "$CARDS" | jq -r --arg ISSUE_URL "https://api.github.com/repos/$REPO/$ISSUE_TYPE/$ISSUE_NUMBER" '.[] | select(.content_url == $ISSUE_URL) | .content_url')
-
-            if [ -n "$CARD_URL" ]; then
-              echo "Issue/PR found in project column $COLUMN_NAME"
-              exit 0
-            fi
-          done
+          # Move item to the BotCreate column
+          MOVE_ITEM_MUTATION='
+          mutation {
+            updateProjectNextItemField(input: {projectId: "'"$PROJECT_ID"'", itemId: "'"$(echo $ADD_ITEM_RESPONSE | jq -r .data.addProjectNextItem.projectNextItem.id)"'", fieldId: "'"$BOT_COLUMN_ID"'", value: "BotCreate"}) {
+              projectNextItem {
+                id
+              }
+            }
+          }
+          '
+          MOVE_ITEM_RESPONSE=$(curl -s -H "Authorization: bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"$MOVE_ITEM_MUTATION\"}" https://api.github.com/graphql)
+          echo "Move Item Response: $MOVE_ITEM_RESPONSE"
