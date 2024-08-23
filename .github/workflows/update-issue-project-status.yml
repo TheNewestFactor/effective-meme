@@ -40,36 +40,27 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
-      - name: Find associated project
-        id: find-project
+      - name: Debug project details
+        id: debug-project
         run: |
           ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
-          PROJECTS=$(gh api -X GET /issues/${ISSUE_OR_PR_NUMBER}/projects --jq '.[] | .id')
-          if [ -z "$PROJECTS" ]; then
-            echo "No associated project found."
-            exit 1
-          fi
-          echo "project_ids=$PROJECTS" >> $GITHUB_ENV
+          echo "Fetching projects for issue/pr number $ISSUE_OR_PR_NUMBER"
+          gh api -X GET /projects/columns/cards --jq ".[] | select(.content_id == $ISSUE_OR_PR_NUMBER) | .project_id"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Find project view ID
         id: get-view-id
         run: |
-          PROJECT_IDS=(${{ env.project_ids }})
+          PROJECT_ID=4905915  # Replace with your project ID
           VIEW_NAME="${{ env.column }}"
-          for PROJECT_ID in "${PROJECT_IDS[@]}"; do
-            VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
-            if [ -n "$VIEW_ID" ]; then
-              echo "view_id=$VIEW_ID" >> $GITHUB_ENV
-              echo "project_id=$PROJECT_ID" >> $GITHUB_ENV
-              break
-            fi
-          done
+          echo "Fetching views for project ID $PROJECT_ID"
+          VIEW_ID=$(gh api -X GET /projects/${PROJECT_ID}/views --jq ".[] | select(.name == \"${VIEW_NAME}\") | .id")
           if [ -z "$VIEW_ID" ]; then
             echo "No view found for project."
             exit 1
           fi
+          echo "view_id=$VIEW_ID" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -77,7 +68,8 @@ jobs:
         run: |
           ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
           VIEW_ID=${{ env.view_id }}
-          gh api -X POST /projects/${PROJECT_ID}/columns/${VIEW_ID}/cards \
+          echo "Moving issue/pr number $ISSUE_OR_PR_NUMBER to view ID $VIEW_ID"
+          gh api -X POST /projects/columns/${VIEW_ID}/cards \
             -f content_id=$ISSUE_OR_PR_NUMBER \
             -f content_type=Issue
         env:
