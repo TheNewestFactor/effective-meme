@@ -43,12 +43,10 @@ jobs:
           COLUMNS_URL=https://api.github.com/projects/$PROJECT_ID/columns
 
           echo "Fetching available columns from: $COLUMNS_URL"
-          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r '. | .[] | .name')
+          AVAILABLE_COLUMNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL)
+          echo "Available columns response: $AVAILABLE_COLUMNS"
 
-          echo "Available columns:"
-          echo "$AVAILABLE_COLUMNS"
-
-          COLUMN_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.inertia-preview+json" $COLUMNS_URL | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
+          COLUMN_ID=$(echo "$AVAILABLE_COLUMNS" | jq -r --arg STATUS "$STATUS" '.[] | select(.name == $STATUS) | .id')
 
           if [ -z "$COLUMN_ID" ]; then
             echo "Column $STATUS not found in the project."
