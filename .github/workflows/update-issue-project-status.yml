@@ -30,13 +30,13 @@ jobs:
           REPO_ID=$(gh repo view ${{ github.repository }} --json id -q '.id')
           echo "repo_id=$REPO_ID" >> $GITHUB_ENV
 
-      - name: Query GitHub GraphQL API
+      - name: Query GitHub GraphQL API for Project Details
         id: graphql-query
         run: |
           GRAPHQL_QUERY=$(cat <<EOF
-          query {
+          {
             repository(owner: "${{ github.repository_owner }}", name: "${{ github.repository_name }}") {
-              projectsV2(first: 5) {
+              projectsV2(first: 10) {
                 nodes {
                   id
                   title
@@ -56,27 +56,6 @@ jobs:
                 }
               }
             }
-            node(id: "UHJvamVjdDo0OTA1OTE1") {
-              ... on ProjectV2 {
-                id
-                title
-                items(first: 10) {
-                  nodes {
-                    id
-                    content {
-                      ... on Issue {
-                        id
-                        title
-                      }
-                      ... on PullRequest {
-                        id
-                        title
-                      }
-                    }
-                  }
-                }
-              }
-            }
           }
           EOF
           )
@@ -86,23 +65,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Parse project information
+      - name: Extract and Print Project Information
         id: parse-project-info
         run: |
-          # Extract project information
-          PROJECT_INFO=$(echo "${{ steps.graphql-query.outputs.RESPONSE }}" | jq -r '.data.repository.projectsV2.nodes[] | select(.items.nodes[]?.content.id == ${{ env.issue_number }}) | {id: .id, title: .title}')
-          if [ -z "$PROJECT_INFO" ]; then
+          PROJECTS=$(echo "${{ steps.graphql-query.outputs.RESPONSE }}" | jq -r '.data.repository.projectsV2.nodes[] | select(.items.nodes[]?.content.id == ${{ env.issue_number }})')
+          if [ -z "$PROJECTS" ]; then
             echo "No project found associated with the issue or repository."
             exit 1
           fi
-          echo "Project Info: $PROJECT_INFO"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug Project Information
-        run: |
-          echo "Debugging project information..."
-          echo "Repository ID: ${{ env.repo_id }}"
-          echo "Issue Number: ${{ env.issue_number }}"
+          # Print the project information
+          echo "Project(s) associated with the issue:"
+          echo "$PROJECTS" | jq -r '. | {id: .id, title: .title}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
