@@ -47,17 +47,12 @@ jobs:
             echo "issue_or_pr=${{ github.event.issue.number }}" >> $GITHUB_ENV
           fi
 
-      - name: Fetch project columns
-        id: fetch-columns
+      - name: Get project column ID
+        id: get-column-id
         run: |
-          PROJECT_NAME="Other user say whaaat"  # Replace with your project name
-          REPO=${{ github.repository }}
-          PROJECT_ID=$(gh api -X GET /repos/${REPO}/projects --jq ".[] | select(.name == \"${PROJECT_NAME}\") | .id")
-          if [ -z "$PROJECT_ID" ]; then
-            echo "No project found or project ID could not be retrieved."
-            exit 1
-          fi
-          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${{ env.column }}\") | .id")
+          PROJECT_ID=4905915  # Provided project ID
+          COLUMN_NAME="${{ env.column }}"
+          COLUMN_ID=$(gh api -X GET /projects/${PROJECT_ID}/columns --jq ".[] | select(.name == \"${COLUMN_NAME}\") | .id")
           if [ -z "$COLUMN_ID" ]; then
             echo "No column found or column ID could not be retrieved."
             exit 1
@@ -68,8 +63,13 @@ jobs:
 
       - name: Update project column
         run: |
-          gh api -X PATCH /repos/${{ github.repository }}/issues/${{ env.issue_or_pr }}/projects \
-            -f project_column_id="${{ env.column_id }}"
+          ISSUE_OR_PR_NUMBER=${{ env.issue_or_pr }}
+          gh api -X POST /projects/${{ env.project_id }}/columns/${{ env.column_id }}/cards --input - <<EOF
+{
+  "content_id": $ISSUE_OR_PR_NUMBER,
+  "content_type": "Issue"
+}
+EOF
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
