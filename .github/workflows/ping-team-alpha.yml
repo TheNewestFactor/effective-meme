@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check issue label
-        if: contains(github.event.issue.labels.*.name, 'your-label')
+        if: contains(github.event.issue.labels.*.name, 'alpha')
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
