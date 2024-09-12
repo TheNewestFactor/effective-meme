@@ -11,7 +11,7 @@ jobs:
       - name: Check issue label
         if: contains(github.event.issue.labels.*.name, 'alpha')
         run: |
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          curl -X POST -H "Authorization: token ${{ secrets.PAT }}" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
           -d '{"body": "@alpha"}'
