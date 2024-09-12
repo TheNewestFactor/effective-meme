@@ -1,0 +1,21 @@
+name: Alpha Issue Template
+description: Use this template for issues related to the Alpha team.
+labels: [alpha]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please provide the following details about the issue.
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: Provide a brief title for the issue
+      placeholder: Issue title
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Provide a detailed description of the issue
+      placeholder: Describe the issue in detail
